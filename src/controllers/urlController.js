@@ -1,10 +1,10 @@
-const UrlMODEl = require('../models/urlModel')
+const UrlModel = require('../models/urlModel')
 const ShortId = require('shortid') //nanoid
 
 
 const isValid = function(value){
     if(typeof (value) == 'undefined' || value == null) return false
-    if(typeof (value) == 'string', value.trim().length > 0) return true
+    if(typeof (value) == 'string' && value.trim().length > 0) return true    
 }
 
 const isValidRequest = function(object){
@@ -30,15 +30,17 @@ const urlShortener = async function(req, res){
     return res.status(400).send({status : false, message : "data is required"})    
     }
 
-    if(Object.keys(requestBody).length > 1){
-    return res.status(400).send({status : false, message : "invalid request"})    
-    }
-
     const longUrl = req.body.longUrl
     const base = "http://localhost:3000"
 
+    
+  
     if(!isValid(longUrl)){
     return res.status(400).send({status : false, message : "URL is required"}) 
+    }
+
+    if(Object.keys(requestBody).length > 1){
+    return res.status(400).send({status : false, message : "invalid request"})    
     }
 
     if(!isValidUrl(longUrl)){
@@ -49,7 +51,7 @@ const urlShortener = async function(req, res){
    let urlCode = ShortId.generate()
 
     try{
-        const URL = await UrlMODEl.findOne({longUrl})
+        const URL = await UrlModel.findOne({longUrl})
 
         if(URL){
             res.status(201).send({status : true, message : "url shorten successfully", data : URL })
@@ -63,7 +65,7 @@ const urlShortener = async function(req, res){
                 shortUrl : shortUrl
             }
 
-            const newUrl = await UrlMODEl.create(urlData)
+            const newUrl = await UrlModel.create(urlData)
 
             res.status(201).send({status : true, message : "url shorten successfully", data : newUrl })
         }
@@ -79,7 +81,7 @@ const getUrl = async function(req, res){
     const requestBody = req.body
     const queryParams = req.query
    
-
+try{
     if(isValidRequest(queryParams)){
     return res.status(400).send({status : false, message : "invalid request"})    
     }
@@ -94,7 +96,7 @@ const getUrl = async function(req, res){
     return res.status(400).send({status : false, message : " urlCode is required"}) 
     }
 
-    const findUrlDetailsByCode = await UrlMODEl.findOne({urlCode : urlCode})
+    const findUrlDetailsByCode = await UrlModel.findOne({urlCode : urlCode})
 
     
     if(!findUrlDetailsByCode){
@@ -102,7 +104,9 @@ const getUrl = async function(req, res){
     }
 
     res.redirect(findUrlDetailsByCode.longUrl)
-
+}catch(err){
+    res.status(500).send({error : err.message})
+}
 }
 
 module.exports.urlShortener = urlShortener
