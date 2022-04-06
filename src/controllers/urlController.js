@@ -15,7 +15,7 @@ const isValidRequest = function (object) {
   return Object.keys(object).length > 0;
 };
 
-// using regex for validating email
+// using regex for validating url
 const isValidUrl = function (value) {
   let regexForUrl =
     /(:?^((https|http|HTTP|HTTPS){1}:\/\/)(([w]{3})[\.]{1})?([a-zA-Z0-9]{1,}[\.])[\w]*((\/){1}([\w@?^=%&amp;~+#-_.]+))*)$/;
@@ -25,7 +25,7 @@ const isValidUrl = function (value) {
 //***********************************CONNECT TO REDIS********************************************** */
 
 const redisClient = redis.createClient(
-    18737,
+  18737,
   "redis-18737.c245.us-east-1-3.ec2.cloud.redislabs.com",
   { no_ready_check: true }
 );
@@ -76,57 +76,51 @@ const urlShortener = async function (req, res) {
 
   try {
     // first lets check catch memory has any data related to input longURL
-    const catchUrlData = await GET_ASYNC(longUrl);
-    console.log(catchUrlData)
+    const urlDataFromCatch = await GET_ASYNC(longUrl);
 
-    if (catchUrlData) {
-        const data = {
-            longUrl : longUrl,
-            urlCode : catchUrlData,
-            shortUrl : base + catchUrlData
-        }
-      res
-        .status(200)
-        .send({
-          status: true,
-          message: "Url shorten successfully",
-          data: data,
-        });
+    if (urlDataFromCatch) {
+      const data = {
+        longUrl: longUrl,
+        urlCode: urlDataFromCatch,
+        shortUrl: base + urlDataFromCatch,
+      };
+      res.status(200).send({
+        status: true,
+        message: "Url shorten successfully",
+        data: data,
+      });
     } else {
       // now as data is not available is catch memory lets check inside DB
-      const url = await UrlModel.findOne({ longUrl }).select({
+      const urlDataFromDB = await UrlModel.findOne({ longUrl }).select({
         shortUrl: 1,
         longUrl: 1,
         urlCode: 1,
         _id: 0,
       });
-      console.log(url)
 
       // if url is present in our DB then first add data to catch then send DB fetched data in response
-      if (url) {
+      if (urlDataFromDB) {
         const addingUrlDataInCatchByLongUrl = await SET_ASYNC(
-            url.longUrl,
-            url.urlCode
+          urlDataFromDB.longUrl,
+          urlDataFromDB.urlCode
         );
 
-          const addingUrlDataInCatchByUrlCode = await SET_ASYNC(
-              url.urlCode,
-              url.longUrl
-          )
+        const addingUrlDataInCatchByUrlCode = await SET_ASYNC(
+          urlDataFromDB.urlCode,
+          urlDataFromDB.longUrl
+        );
 
-        return res
-          .status(200)
-          .send({
-            status: true,
-            message: "url shorten successfully",
-            data: url,
-          });
+        return res.status(200).send({
+          status: true,
+          message: "url shorten successfully",
+          data: url,
+        });
 
         //else we will create a new document in DB. Also add same data inside catch memory for future call
       } else {
         // generating random code by using shortid package
         const urlCode = ShortId.generate().toLowerCase();
-        const shortUrl = base + urlCode
+        const shortUrl = base + urlCode;
 
         const urlData = {
           urlCode: urlCode,
@@ -141,13 +135,12 @@ const urlShortener = async function (req, res) {
           urlData.longUrl,
           urlData.urlCode
         );
-        // console.log(addingUrlDataInCatchByLongUrl)
 
         const addingUrlDataInCatchByUrlCode = await SET_ASYNC(
-            urlData.urlCode,
-            urlData.longUrl
-        )
-        // console.log(addingUrlDataInCatchByUrlCode)
+          urlData.urlCode,
+          urlData.longUrl
+        );
+
         // in response we are sending urlData as per demand
         return res.status(201).send({
           status: true,
@@ -182,7 +175,6 @@ const getUrl = async function (req, res) {
     }
 
     const urlCode = req.params.urlCode;
-    console.log(typeof (urlCode))
 
     if (!urlCode) {
       return res
@@ -191,29 +183,31 @@ const getUrl = async function (req, res) {
     }
 
     // First lets check inside catch memory
-    const catchUrlData = await GET_ASYNC(urlCode)
+    const urlDataFromCatch = await GET_ASYNC(urlCode);
 
-    if(catchUrlData){
-        console.log(catchUrlData)
-        return  res.redirect(catchUrlData)
+    if (urlDataFromCatch) {
+      return res.redirect(urlDataFromCatch);
+    } else {
+      const urlDataByUrlCode = await UrlModel.findOne({ urlCode });
 
-    }else{
-        const urlDetailsByCode = await UrlModel.findOne({ urlCode });
-        console.log(urlDetailsByCode)
+      if (!urlDataByUrlCode) {
+        return res
+          .status(404)
+          .send({ status: false, message: "no such url exist" });
+      }
 
-        if (!urlDetailsByCode) {
-          return res
-            .status(404)
-            .send({ status: false, message: "no such url exist" });
-        }
+      const addingUrlDataInCatchByUrlCode = SET_ASYNC(
+        urlCode,
+        urlDataByUrlCode.longUrl
+      );
+      const addingUrlDataInCatchByLongUrl = SET_ASYNC(
+        urlDataByUrlCode.longUrl,
+        urlCode
+      );
 
-    const addingUrlDataInCatchByUrlCode = SET_ASYNC(urlCode, urlDetailsByCode.longUrl)
-    const addingUrlDataInCatchByLongUrl = SET_ASYNC(urlDetailsByCode.longUrl, urlCode)
-
-    // if we found the document by urlCode then redirecting the user to original url
-      return  res.redirect(urlDetailsByCode.longUrl);
+      // if we found the document by urlCode then redirecting the user to original url
+      return res.redirect(urlDataByUrlCode.longUrl);
     }
-    
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
@@ -221,5 +215,4 @@ const getUrl = async function (req, res) {
 
 //**********************************EXPORTING BOTH HANDLERS************************************************/
 
-module.exports.urlShortener = urlShortener;
-module.exports.getUrl = getUrl;
+module.exports = { urlShortener, getUrl };
