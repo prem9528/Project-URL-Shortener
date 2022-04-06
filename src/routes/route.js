@@ -7,15 +7,11 @@ router.get('/test', function(req, res){
     res.send({status : true, message : "Test API working fine"})
 })
 
+// API for url shortening 
 router.post('/url/shorten', UrlController.urlShortener )
 
+// API for redirecting to original url
 router.get('/:urlCode', UrlController.getUrl)
-
-
-
-
-
-
 
 
 
