@@ -57,7 +57,7 @@ const urlShortener = async function (req, res) {
   }
   //base url is taken from readme
   const longUrl = req.body.longUrl;
-  const base = "http://localhost:3000/";
+  const base = "http://localhost:3000";
 
   if (!isValid(longUrl)) {
     return res.status(400).send({ status: false, message: "URL is required" });
@@ -65,7 +65,7 @@ const urlShortener = async function (req, res) {
 
   // if requestBody has more than one key
   if (Object.keys(requestBody).length > 1) {
-    return res.status(400).send({ status: false, message: "invalid request" });
+    return res.status(400).send({ status: false, message: "invalid entry in request body" });
   }
 
   if (!isValidUrl(longUrl)) {
@@ -75,14 +75,14 @@ const urlShortener = async function (req, res) {
   }
 
   try {
-    // first lets check catch memory has any data related to input longURL
-    const urlDataFromCatch = await GET_ASYNC(longUrl);
+    // first lets check cache memory has any data related to input longURL
+    const urlDataFromCache = await GET_ASYNC(longUrl);
 
-    if (urlDataFromCatch) {
+    if (urlDataFromCache) {
       const data = {
         longUrl: longUrl,
-        urlCode: urlDataFromCatch,
-        shortUrl: base + urlDataFromCatch,
+        urlCode: urlDataFromCache,
+        shortUrl: base + "/" + urlDataFromCache,
       };
       res.status(200).send({
         status: true,
@@ -90,7 +90,7 @@ const urlShortener = async function (req, res) {
         data: data,
       });
     } else {
-      // now as data is not available is catch memory lets check inside DB
+      // now as data is not available is cache memory lets check inside DB
       const urlDataFromDB = await UrlModel.findOne({ longUrl }).select({
         shortUrl: 1,
         longUrl: 1,
@@ -98,14 +98,14 @@ const urlShortener = async function (req, res) {
         _id: 0,
       });
 
-      // if url is present in our DB then first add data to catch then send DB fetched data in response
+      // if url is present in our DB then first add data to cache then send DB fetched data in response
       if (urlDataFromDB) {
-        const addingUrlDataInCatchByLongUrl = await SET_ASYNC(
+        const addingUrlDataInCacheByLongUrl = await SET_ASYNC(
           urlDataFromDB.longUrl,
           urlDataFromDB.urlCode
         );
 
-        const addingUrlDataInCatchByUrlCode = await SET_ASYNC(
+        const addingUrlDataInCacheByUrlCode = await SET_ASYNC(
           urlDataFromDB.urlCode,
           urlDataFromDB.longUrl
         );
@@ -113,14 +113,14 @@ const urlShortener = async function (req, res) {
         return res.status(200).send({
           status: true,
           message: "url shorten successfully",
-          data: url,
+          data: urlDataFromDB,
         });
 
-        //else we will create a new document in DB. Also add same data inside catch memory for future call
+        //else we will create a new document in DB. Also add same data inside cache memory for future call
       } else {
         // generating random code by using shortid package
         const urlCode = ShortId.generate().toLowerCase();
-        const shortUrl = base + urlCode;
+        const shortUrl = base + "/" + urlCode;
 
         const urlData = {
           urlCode: urlCode,
@@ -128,15 +128,15 @@ const urlShortener = async function (req, res) {
           shortUrl: shortUrl,
         };
 
-        // creating url data inside DB and setting same data to catch memory
+        // creating url data inside DB and setting same data to cache memory
         const newUrl = await UrlModel.create(urlData);
 
-        const addingUrlDataInCatchByLongUrl = await SET_ASYNC(
+        const addingUrlDataInCacheByLongUrl = await SET_ASYNC(
           urlData.longUrl,
           urlData.urlCode
         );
 
-        const addingUrlDataInCatchByUrlCode = await SET_ASYNC(
+        const addingUrlDataInCacheByUrlCode = await SET_ASYNC(
           urlData.urlCode,
           urlData.longUrl
         );
@@ -176,17 +176,17 @@ const getUrl = async function (req, res) {
 
     const urlCode = req.params.urlCode;
 
-    if (!urlCode) {
+    if ( !/^(?=.*[a-zA-Z].*)[a-zA-Z\d!@#-_$%&*]{8,}$/.test(urlCode)) {
       return res
         .status(400)
-        .send({ status: false, message: " urlCode is required" });
+        .send({ status: false, message: " enter a valid urlCode"});
     }
 
-    // First lets check inside catch memory
-    const urlDataFromCatch = await GET_ASYNC(urlCode);
+    // First lets check inside cache memory
+    const urlDataFromCache = await GET_ASYNC(urlCode);
 
-    if (urlDataFromCatch) {
-      return res.redirect(urlDataFromCatch);
+    if (urlDataFromCache) {
+      return res.status(302).redirect(urlDataFromCache);
     } else {
       const urlDataByUrlCode = await UrlModel.findOne({ urlCode });
 
@@ -196,17 +196,17 @@ const getUrl = async function (req, res) {
           .send({ status: false, message: "no such url exist" });
       }
 
-      const addingUrlDataInCatchByUrlCode = SET_ASYNC(
+      const addingUrlDataInCacheByUrlCode = SET_ASYNC(
         urlCode,
         urlDataByUrlCode.longUrl
       );
-      const addingUrlDataInCatchByLongUrl = SET_ASYNC(
+      const addingUrlDataInCacheByLongUrl = SET_ASYNC(
         urlDataByUrlCode.longUrl,
         urlCode
       );
 
       // if we found the document by urlCode then redirecting the user to original url
-      return res.redirect(urlDataByUrlCode.longUrl);
+      return res.status(302).redirect(urlDataByUrlCode.longUrl);
     }
   } catch (err) {
     res.status(500).send({ error: err.message });
